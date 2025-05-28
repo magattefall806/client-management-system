@@ -1,0 +1,318 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Liste des clients</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 2rem;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f2f4f7;
+    }
+
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+    }
+
+    .header h1 {
+      font-size: 1.8rem;
+      color: #333;
+    }
+
+    .add-btn {
+      padding: 0.6rem 1rem;
+      background-color: #50820f;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-weight: bold;
+    }
+
+    .add-btn:hover {
+      background-color: #58d45e;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background-color: white;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 0 10px rgba(0,0,0,0.05);
+    }
+
+    th, td {
+      padding: 1rem;
+      text-align: left;
+      border-bottom: 1px solid #e5e7eb;
+    }
+
+    th {
+      background-color: #f9fafb;
+      color: #111827;
+      font-size: 0.95rem;
+      font-weight: 600;
+    }
+
+    td {
+      font-size: 0.92rem;
+      color: #374151;
+    }
+
+    .actions button {
+      margin-right: 0.5rem;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.85rem;
+      background-color: white;
+    }
+
+    .actions button:hover {
+      color: rgb(73, 154, 240);
+    }
+
+    .actions span {
+      margin: 0 0.3rem;
+      color: #ccc;
+    }
+
+    #loading, #error {
+      margin-top: 1rem;
+      font-style: italic;
+      color: #6b7280;
+    }
+
+    #error {
+      color: #dc2626;
+    }
+
+    .modal {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background-color: rgba(0, 0, 0, 0.3);
+      justify-content: center;
+      align-items: center;
+    }
+
+    .modal-content {
+      background-color: white;
+      padding: 2rem;
+      border-radius: 10px;
+      width: 400px;
+      box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+    }
+
+    .modal-content h2 {
+      margin-top: 0;
+      font-size: 1.4rem;
+      margin-bottom: 1rem;
+    }
+
+    .modal-content label {
+      display: block;
+      margin-bottom: 0.5rem;
+      font-weight: bold;
+    }
+
+    .modal-content input, .modal-content select {
+      width: 100%;
+      padding: 0.5rem;
+      margin-bottom: 1rem;
+      border: 1px solid #d1d5db;
+      border-radius: 6px;
+    }
+
+    .modal-content button {
+      margin-right: 0.5rem;
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: 6px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    .save-btn {
+      background-color: #4f46e5;
+      color: white;
+    }
+
+    .cancel-btn {
+      background-color: #e5e7eb;
+      color: #111827;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>Gestion client (CRUD)</h1>
+    <button class="add-btn" onclick="ouvrirFormulaire()">+ Ajouter un client</button>
+  </div>
+
+  <div id="loading">Chargement des clients...</div>
+  <div id="error"></div>
+
+  <table id="clients-table" style="display: none;">
+    <thead>
+      <tr>
+        <th>Nom</th>
+        <th>Email</th>
+        <th>Téléphone</th>
+        <th>Status</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- Données JS ici -->
+    </tbody>
+  </table>
+
+  <!-- Formulaire dans une modale -->
+  <div class="modal" id="form-modal">
+    <div class="modal-content">
+      <h2 id="form-title">Ajouter un client</h2>
+      <label for="nom">Nom</label>
+      <input type="text" id="nom" required>
+      <label for="email">Email</label>
+      <input type="email" id="email" required>
+      <label for="phone">Téléphone</label>
+      <input type="text" id="phone" required>
+      <label for="status">Status</label>
+      <select id="status" required>
+        <option value="">-- Choisir --</option>
+        <option value="Actif">Actif</option>
+        <option value="Inactif">Inactif</option>
+      </select>
+      <button class="save-btn" onclick="enregistrerClient()">Enregistrer</button>
+      <button class="cancel-btn" onclick="fermerFormulaire()">Annuler</button>
+    </div>
+  </div>
+
+  <script>
+    let clientIdEnEdition = null;
+
+    const API_URL = 'http://localhost:8000/api/customers/';
+    const loadingDiv = document.getElementById('loading');
+    const errorDiv = document.getElementById('error');
+    const clientsTable = document.getElementById('clients-table');
+    const tbody = clientsTable.querySelector('tbody');
+
+    function afficherClients(clients) {
+      tbody.innerHTML = '';
+      clients.forEach(client => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+          <td>${client.nom}</td>
+          <td>${client.email}</td>
+          <td>${client.phone}</td>
+          <td>${client.status}</td>
+          <td class="actions">
+            <button onclick="remplirFormulaire(${client.id}, '${client.nom}', '${client.email}', '${client.phone}', '${client.status}')">Modifier</button>
+            <span>|</span>
+            <button onclick="supprimerClient(${client.id})">Supprimer</button>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function chargerClients() {
+      try {
+        const response = await fetch(API_URL);
+        if (!response.ok) throw new Error(`Erreur HTTP : ${response.status}`);
+        const data = await response.json();
+        afficherClients(data);
+        loadingDiv.style.display = 'none';
+        errorDiv.textContent = '';
+        clientsTable.style.display = 'table';
+      } catch (err) {
+        loadingDiv.style.display = 'none';
+        errorDiv.textContent = `Erreur lors du chargement : ${err.message}`;
+      }
+    }
+
+    function ouvrirFormulaire() {
+      document.getElementById('form-modal').style.display = 'flex';
+      document.getElementById('form-title').textContent = clientIdEnEdition ? 'Modifier un client' : 'Ajouter un client';
+    }
+
+    function fermerFormulaire() {
+      document.getElementById('form-modal').style.display = 'none';
+      clientIdEnEdition = null;
+      document.getElementById('nom').value = '';
+      document.getElementById('email').value = '';
+      document.getElementById('phone').value = '';
+      document.getElementById('status').value = '';
+    }
+
+    function remplirFormulaire(id, nom, email, phone, status) {
+      clientIdEnEdition = id;
+      document.getElementById('nom').value = nom;
+      document.getElementById('email').value = email;
+      document.getElementById('phone').value = phone;
+      document.getElementById('status').value = status;
+      ouvrirFormulaire();
+    }
+
+    async function enregistrerClient() {
+      const nom = document.getElementById('nom').value.trim();
+      const email = document.getElementById('email').value.trim();
+      const phone = document.getElementById('phone').value.trim();
+      const status = document.getElementById('status').value;
+
+      if (!nom || !email || !phone || !status) {
+        alert('Tous les champs sont requis.');
+        return;
+      }
+
+      const payload = { nom, email, phone, status };
+      const url = clientIdEnEdition ? `${API_URL}${clientIdEnEdition}/` : API_URL;
+      const method = clientIdEnEdition ? 'PUT' : 'POST';
+
+      try {
+        const response = await fetch(url, {
+          method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.detail || 'Erreur lors de l\'enregistrement.');
+        }
+
+        fermerFormulaire();
+        chargerClients();
+      } catch (err) {
+        alert('Erreur : ' + err.message);
+      }
+    }
+
+    async function supprimerClient(id) {
+      if (!confirm('Voulez-vous vraiment supprimer ce client ?')) return;
+
+      try {
+        const response = await fetch(`${API_URL}${id}/`, {
+          method: 'DELETE'
+        });
+
+        if (!response.ok) throw new Error('Erreur lors de la suppression.');
+
+        chargerClients();
+      } catch (err) {
+        alert('Erreur : ' + err.message);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', chargerClients);
+  </script>
+</body>
+</html>
